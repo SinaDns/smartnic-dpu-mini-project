@@ -1,0 +1,177 @@
+\documentclass[10pt]{beamer}
+
+% --- Theme and Colors ---
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+\setbeamercolor{block title}{bg=blue!70!black,fg=white}
+\setbeamercolor{block body}{bg=blue!5!white,fg=black}
+\setbeamerfont{title}{series=\bfseries,parent=structure}
+\setbeamertemplate{navigation symbols}{} % Hide nav symbols
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+
+% --- Title Information ---
+\title[SmartNICs \& DPUs]{SmartNICs and Data Processing Units (DPUs)}
+\subtitle{Computer Networks}
+\author[Daneshgar \& Abbaszadeh]{Sina Daneshgar \\ Mohammadmohsen Abbaszadeh}
+\institute[Sharif Uni. of Tech.]{Sharif University of Technology}
+\date[Feb 2026]{Feb 2026}
+
+\begin{document}
+
+% 1. Title Slide
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% 2. Outline
+\begin{frame}{Seminar Overview}
+    \begin{columns}[t]
+        \begin{column}{0.5\textwidth}
+            \tableofcontents[sections={1-3}]
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \tableofcontents[sections={4-7}]
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\section{Introduction and Global Context}
+\begin{frame}{The Evolution of Compute}
+    \begin{description}
+        \item[CPU] General purpose, high flexibility, but high latency for simple repetitive tasks.
+        \item[GPU] Specialized for parallel processing (Graphics, AI).
+        \item[DPU] Specialized for \textbf{Data-Centric} tasks (Moving, Processing, Securing data).
+    \end{description}
+    \vfill
+    \begin{block}{Why now?}
+        Moore's Law is slowing down, while networking speeds are exploding (10G $\rightarrow$ 100G $\rightarrow$ 400G). The CPU can no longer keep up with the networking interrupt load.
+    \end{block}
+\end{frame}
+
+\section{The Infrastructure Tax}
+\begin{frame}{Quantifying the "Infrastructure Tax"}
+    Data centers spend 20-30\% of their total compute power just on "tax" tasks:
+    \begin{itemize}
+        \item \textbf{Virtualization}: OVS (Open vSwitch) overhead, encapsulation (VXLAN, Geneve).
+        \item \textbf{Storage}: NVMe-oF (NVMe over Fabrics) protocol translation and management.
+        \item \textbf{Security}: Distributed Firewalls, Micro-segmentation, and Wire-speed TLS/IPsec.
+    \end{itemize}
+    \vfill
+    \begin{alertblock}{The Bottleneck}
+        Every packet processed by the CPU is a cycle stolen from the user application (Application Stall).
+    \end{alertblock}
+\end{frame}
+
+\section{Detailed Architecture}
+\begin{frame}{Deep Dive: What's inside a DPU?}
+    Unlike a standard NIC, a DPU (like NVIDIA BlueField or AMD Pensando) contains:
+    \begin{itemize}
+        \item \textbf{ARM/RISC-V Cluster}: Runs a standard Linux OS for management and control.
+        \item \textbf{Network Acceleration Engine}: Programmable hardware for parsing and switching.
+        \item \textbf{Hardware Engines}:
+            \begin{itemize}
+                \item \textbf{Crypto}: Hardware-accelerated IPsec/TLS and Disk encryption.
+                \item \textbf{Storage}: VirtIO-blk acceleration and Compression engines.
+                \item \textbf{Timing}: PTP (Precision Time Protocol) for finance/telecom.
+            \end{itemize}
+        \item \textbf{On-board RAM}: For local state, lookups, and buffering (~16-32GB DDR4/5).
+    \end{itemize}
+\end{frame}
+
+\section{Programming Paradigms}
+\begin{frame}{Programmability: P4 and the Match-Action Pipeline}
+    \begin{itemize}
+        \item \textbf{P4 (Programming Protocol-independent Packet Processors)}:
+            \begin{itemize}
+                \item Define custom headers and parsers.
+                \item Programmable Match-Action tables inside the NIC silicon.
+                \item Allows for "Protocol Independence."
+            \end{itemize}
+        \item \textbf{Implementation}: Our repository (\texttt{examples/02-p4}) shows a basic L2 forwarding logic defined in P4_16.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Programmability: eBPF and XDP}
+    \begin{itemize}
+        \item \textbf{eBPF (Extended Berkeley Packet Filter)}:
+            \begin{itemize}
+                \item Runs JIT-compiled bytecode inside the Linux kernel.
+                \item High safety (verified at load time) and extreme speed.
+            \end{itemize}
+        \item \textbf{XDP (eXpress Data Path)}:
+            \begin{itemize}
+                \item An eBPF hook placed as early as possible (the NIC driver).
+                \item Can DROP, FORWARD, or REDIRECT packets \textit{before} the kernel allocates a socket buffer (\texttt{sk_buff}).
+            \end{itemize}
+        \item \textbf{Demo}: See our \texttt{examples/03-ebpf-xdp} filter for ICMP-drop results.
+    \end{itemize}
+\end{frame}
+
+\section{Real-World Applications}
+\begin{frame}{Application 1: Cloud Resource Disaggregation}
+    \begin{itemize}
+        \item \textbf{Traditional}: Storage and Compute locked in the same physical box.
+        \item \textbf{DPU-based}: Storage is remote (over NVMe-oF), but the DPU makes it look like a local NVMe drive to the host OS.
+    \end{itemize}
+    \vfill
+    \begin{exampleblock}{Benefit}
+        Storage performance is identical to local SSDs, but with the flexibility of network-attached storage.
+    \end{exampleblock}
+\end{frame}
+
+\begin{frame}{Application 2: Bare Metal as a Service (BMaaS)}
+    \begin{itemize}
+        \item Cloud providers (AWS, Azure) want to rent "Bare Metal" to users.
+        \item \textbf{Problem}: How to monitor and isolate the user if they have full control?
+        \item \textbf{Solution}: The DPU acts as the "Sidecar" manager. It manages networking and security \textit{outside} the host, so the user cannot bypass it.
+    \end{itemize}
+\end{frame}
+
+\section{Performance Simulation}
+\begin{frame}{Simulation: Offload Performance}
+    We simulated the host CPU throughput gains when offloading work to a DPU.
+    \vfill
+    \centering
+    \includegraphics[width=0.75\textwidth]{../../assets/offload_plot.png}
+    \vfill
+    \par\footnotesize Simulation results show $>50\%$ throughput increase in targeted workloads when logic is moved to the hardware pipeline.
+\end{frame}
+
+\section{Summary and Future Outlook}
+\begin{frame}{Current Challenges and Limitations}
+    \begin{itemize}
+        \item \textbf{Vendor Lock-in}: No universal "Standard" for all DPUs yet (though P4 helps).
+        \item \textbf{Complex Debugging}: Inspecting code running inside a NIC is harder than on a host.
+        \item \textbf{Power Consumption}: High-end DPUs can consume over 75W-100W per card.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Closing Summary}
+    \begin{itemize}
+        \item \textbf{Offload is Mandatory}: At 100G+ speeds, host processing is no longer viable.
+        \item \textbf{Isolation is Security}: DPUs create a "Hard Gap" between the user VM and the infrastructure provider.
+        \item \textbf{The New Tier}: DPUs are becoming the third pillar of data center compute alongside CPUs and GPUs.
+    \end{itemize}
+\end{frame}
+
+\section{Conclusion}
+\begin{frame}{Summary}
+    \begin{itemize}
+        \item DPUs recover "lost" CPU cycles for user applications.
+        \item They provide hardware-level security isolation.
+        \item Programming models (P4/eBPF) are maturing fast.
+    \end{itemize}
+    \vfill
+    \centering
+    \Large \textbf{Thank You!} \\
+    \small Questions?
+\end{frame}
+
+\end{document}

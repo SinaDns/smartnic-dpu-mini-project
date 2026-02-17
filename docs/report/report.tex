@@ -1,0 +1,153 @@
+\documentclass[12pt,a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{libertine}
+\usepackage{microtype}
+
+% --- Styling ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    citecolor=green!60!black
+}
+
+\titleformat{\section}{\large\bfseries\color{blue!80!black}}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{orange}
+}
+
+% --- Content ---
+\title{
+    \vspace{-2cm}
+    \begin{minipage}{\textwidth}
+        \flushright \small \texttt{Seminar Project: Computer Systems \& Networks}
+    \end{minipage} \\[1cm]
+    \textbf{\Large SmartNICs and Data Processing Units (DPUs)} \\
+    \large Bridging the Gap between Performance and Programmability
+}
+\author{
+    \textbf{Sina Daneshgar} \& \textbf{Mohammadmohsen Abbaszadeh} \\
+    \small \href{mailto:sina@example.com}{SinaDns} \& \href{mailto:mohsen@example.com}{HisEgo}
+}
+\date{February 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+As cloud computing and data center workloads scale, the traditional CPU-centric architecture faces significant bottlenecks in networking and storage overhead. This project investigates the emergence of SmartNICs and Data Processing Units (DPUs) as a solution to these "infrastructure taxes." We provide a technical overview of DPU architectures, survey programming models such as P4 and eBPF/XDP, and present a simulation demonstrating the performance gains achievable through hardware offloading.
+\end{abstract}
+
+\section{Introduction}
+The exponential growth of data center traffic has outpaced the gains in single-threaded CPU performance. Networking tasks such as encryption, load balancing, and packet inspection can consume up to 30\% of host CPU cycles in modern cloud environments. SmartNICs and DPUs address this by moving these tasks to specialized networking hardware.
+
+\section{The Infrastructure Tax}
+In modern hyperscale data centers, a significant portion of compute resources is dedicated to management and utility tasks rather than user applications. This overhead, often termed the "Infrastructure Tax," stems from several key domains:
+\begin{itemize}
+    \item \textbf{Virtualization}: The management of virtual switches (e.g., Open vSwitch) and encapsulation protocols like VXLAN or Geneve.
+    \item \textbf{Storage}: Protocol translation for networked storage, such as NVMe over Fabrics (NVMe-oF).
+    \item \textbf{Security}: Implementing distributed firewalls, micro-segmentation, and wire-speed encryption (TLS/IPsec).
+\end{itemize}
+When these tasks are executed on the host CPU, they compete for cache, memory bandwidth, and execution cycles, leading to "application stall" and reduced return on investment for hardware assets.
+
+\section{Evolution and Architecture}
+The network interface has evolved from a simple transport bridge into a complex compute node:
+\begin{enumerate}
+    \item \textbf{Legacy NICs}: Fixed-function ASICs for L2/L3 transport with minimal offload capabilities (e.g., Checksum offload).
+    \item \textbf{SmartNICs}: Programmable devices based on FPGAs or SoCs, capable of offloading specific pipeline stages like OVS datapath or encryption.
+    \item \textbf{DPUs}: Fully integrated "Data Center on a Chip" that functions as an independent compute subsystem.
+\end{enumerate}
+
+\subsection{DPU Internal Architecture}
+A modern DPU (such as the NVIDIA BlueField-3 or AMD Pensando) typically consists of four primary components:
+\begin{itemize}
+    \item \textbf{General-Purpose Compute Cluster}: Usually several high-performance ARM or RISC-V cores. These cores run a full Linux distribution, allowing the DPU to handle control-plane tasks and complex management logic.
+    \item \textbf{Programmable Network Engine}: A high-throughput pipeline designed for packet parsing, match-action processing, and flow tracking at line rates (100–400 Gbps).
+    \item \textbf{Hardware Acceleration Engines}: Dedicated silicon for computationally expensive operations, including:
+    \begin{itemize}
+        \item \textbf{Cryptography}: AES-GCM and SHA acceleration for WireGuard, IPsec, and TLS.
+        \item \textbf{Storage}: VirtIO-blk/VirtIO-net acceleration and compression engines for storage disaggregation.
+        \item \textbf{Timing}: Support for Precision Time Protocol (PTP) for high-frequency trading and telecommunications.
+    \end{itemize}
+    \item \textbf{Dedicated Memory}: On-board RAM (typically 16–32 GB) to store flow tables, connection states, and local application data without taxing the host's memory.
+\end{itemize}
+
+\section{Programming Paradigms}
+The shift toward DPUs necessitates flexible programming models that can leverage hardware acceleration without sacrificing developer productivity.
+
+\subsection{P4: The Domain-Specific Language for Data Planes}
+P4 (\textit{Programming Protocol-independent Packet Processors}) is a language designed to specify how packets are processed by the data plane. Key features include:
+\begin{itemize}
+    \item \textbf{Protocol Independence}: The device is not hard-coded for specific protocols (e.g., IPv4, MPLS). Instead, the programmer defines custom header formats and parsers.
+    \item \textbf{Match-Action Pipelines}: Logic is structured into tables that match specific header fields and execute actions (e.g., encapsulate, drop, increment TTL).
+\end{itemize}
+Our repository provides a sample P4\_16 implementation in \texttt{examples/02-p4} which demonstrates basic Layer 2 forwarding logic on a programmable pipeline.
+
+\subsection{eBPF and the eXpress Data Path (XDP)}
+While P4 targets the hardware pipeline, eBPF (extended Berkeley Packet Filter) allows for safe, high-performance execution of code within the Linux kernel. XDP is a specific hook for eBPF that processes packets at the earliest possible point in the software stack:
+\begin{itemize}
+    \item \textbf{Kernel Bypass without Bypass}: XDP runs before the \texttt{sk\_buff} allocation, achieving performance comparable to DPDK while maintaining the security and usability of the Linux kernel.
+    \item \textbf{Practical Application}: In \texttt{examples/03-ebpf-xdp}, we showcase a filter capable of dropping ICMP traffic at the driver level, significantly reducing the overhead compared to user-space firewalls.
+\end{itemize}
+
+\section{Real-World Use Cases}
+DPUs enable architectural shifts that were previously inefficient or impossible using standard NICs.
+
+\subsection{Cloud Resource Disaggregation}
+In a traditional server architecture, storage and compute are tightly coupled within the same chassis. DPUs facilitate \textit{disaggregation} by allowing storage to be pulled from a remote pool over the network while appearing as a local NVMe block device to the host OS. The DPU handles the NVMe-oF translation in hardware, minimizing latency and freeing the host CPU from storage stack processing.
+
+\subsection{Bare Metal as a Service (BMaaS)}
+Cloud providers utilize DPUs as an "out-of-band" management layer. By running the virtualization and security stack on the DPU (the "sidecar" model), providers can offer customers full "Bare Metal" access to the host CPU while maintaining strict isolation. Even if the guest OS is compromised, the DPU remains a secure enclave that the user cannot bypass.
+
+\section{Challenges and Limitations}
+Despite their benefits, the adoption of DPUs faces several hurdles:
+\begin{itemize}
+    \item \textbf{Vendor Lock-in}: Unlike the CPU market, DPU programming environments are often fragmented. While P4 provides a degree of portability, many performance-critical features remain tied to vendor-specific SDKs (e.g., NVIDIA DOCA, Intel IPDK).
+    \item \textbf{Power and Thermal management}: High-performance DPUs can consume between 75W and 120W. Integrating these into standard server slots requires careful consideration of the power delivery and cooling capacity of the data center.
+    \item \textbf{Observability}: Debugging code running on a remote DPU cluster is significantly more complex than standard host debugging, requiring specialized tools for tracing and telemetry.
+\end{itemize}
+
+\section{Performance Analysis}
+We developed a simulation to model the impact of DPU offloading on host CPU throughput. By shifting a fraction $\alpha$ of processing work to the DPU, the host can handle significantly higher packet rates.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.7\textwidth]{../../assets/offload_plot.png}
+    \caption{Simulated Packet Throughput: CPU-only vs. DPU-offloaded model.}
+\end{figure}
+
+\section{Conclusion}
+The transition from fixed-function NICs to fully programmable Data Processing Units represents a fundamental shift in data center architecture. By offloading the "Infrastructure Tax" to specialized hardware, DPUs recover lost host CPU cycles for revenue-generating user applications. Our simulation confirms that even a partial offload of networking tasks can yield significant throughput gains. As programming standardizations like P4 and eBPF continue to mature, DPUs are poised to become the third pillar of compute alongside the CPU and GPU.
+
+\begin{thebibliography}{9}
+\bibitem{p4}
+P. Bosshart et al., "P4: programming protocol-independent packet processors," ACM SIGCOMM Computer Communication Review, vol. 44, no. 3, pp. 87-95, 2014.
+\bibitem{xdp}
+T. Høiland-Jørgensen et al., "The eXpress Data Path: Fast Programmable Packet Processing in the Operating System Kernel," Proceedings of the 14th International Conference on emerging Networking EXperiments and Technologies (CoNEXT), 2018.
+\bibitem{dpu_survey}
+G. Liu et al., "A Survey of SmartNICs and DPUs: Architecture, Programming, and Applications," IEEE Communications Surveys \& Tutorials, 2024.
+\end{thebibliography}
+
+\end{document}
