@@ -1,4 +1,4 @@
-// basic_l2.p4 -- minimal P4_16 L2 forwarding example (educational)
+// basic_l2.p4 -- minimal P4_16 L2 forwarding example
 #include <core.p4>
 
 typedef bit<48> mac_t;

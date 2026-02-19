@@ -74,7 +74,7 @@
                 \item \textbf{Storage}: VirtIO-blk acceleration and Compression engines.
                 \item \textbf{Timing}: PTP (Precision Time Protocol) for finance/telecom.
             \end{itemize}
-        \item \textbf{On-board RAM}: For local state, lookups, and buffering (~16-32GB DDR4/5).
+        \item \textbf{On-board RAM}: For local state, lookups, and buffering (\approx16-32GB DDR4/5).
     \end{itemize}
 \end{frame}
 
@@ -85,7 +85,7 @@
     \vspace{2mm}
     \begin{itemize}
         \item Spectrum from fixed-function NICs to highly-programmable DPUs (compare programmability vs. capability).
-        \item Use this slide when you explain trade-offs: throughput, latency and power.
+        \item Comparing programmability versus throughput, latency, and power.
     \end{itemize}
 \end{frame}
 
@@ -141,7 +141,7 @@ table mac_forwarding {
 \end{lstlisting}
 \begin{itemize}
     \item Simple match-action pipeline: lookups happen in hardware tables.
-    \item Point to \texttt{basic\_l2.p4} when explaining table installs and entries.
+    \item See \texttt{examples/02-p4-programmability/basic\_l2.p4} to demonstrate how the control plane installs MAC \rightarrow port table entries.
 \end{itemize}
 \end{frame}
 
@@ -166,7 +166,7 @@ if (ip->protocol == IPPROTO_ICMP) {
     \end{itemize}
     \vfill
     \begin{exampleblock}{Benefit}
-        Storage performance is identical to local SSDs, but with the flexibility of network-attached storage.
+        For many workloads, NVMe-oF via a DPU can deliver performance close to a local SSD while providing the flexibility of network-attached storage.
     \end{exampleblock}
 \end{frame}
 
@@ -183,7 +183,7 @@ if (ip->protocol == IPPROTO_ICMP) {
         \item \textbf{Problem}: Volumetric attacks and high-rate malicious flows can saturate host CPUs and network queues.
         \item \textbf{DPU approach}: perform early-drop and per-flow state in the NIC (P4 / hardware match-action) or attach XDP/eBPF at the driver for rapid filtering.
         \item \textbf{Benefits}: drop malicious traffic at line-rate, reduce host CPU consumption, and enable real-time telemetry for upstream mitigation.
-        \item \textbf{Demo hint}: start with `examples/03-ebpf-xdp` for early-drop logic; scale to DPU offloads for production.
+        \item \textbf{Demo hint}: run the XDP example in \texttt{examples/03-ebpf-xdp} to show early-drop; explain how production systems move similar logic onto DPUs.
     \end{itemize}
 \end{frame}
 
@@ -194,9 +194,9 @@ if (ip->protocol == IPPROTO_ICMP) {
     \centering
     \includegraphics[width=0.75\textwidth]{../../assets/offload_plot.png}
     \vspace{2mm}
-    \small Model note: offloading fraction $\alpha$ of packet processing increases host capacity approximately proportionally.
+    \small Model note: as the fraction $\alpha$ of packet processing is offloaded, host throughput improves roughly in proportion — until other bottlenecks (PCIe, NIC) appear.
     \vfill
-    \par\footnotesize Simulation results show $>50\%$ throughput increase in targeted workloads when logic is moved to the hardware pipeline.
+    \par\footnotesize In our simulation, moving packet-processing logic to the hardware dataplane yielded more than a 50\% throughput improvement for the targeted workloads.
 \end{frame}
 
 \section{Summary and Future Outlook}
