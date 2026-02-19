@@ -31,15 +31,8 @@
 \end{frame}
 
 % 2. Outline
-\begin{frame}{Seminar Overview}
-    \begin{columns}[t]
-        \begin{column}{0.5\textwidth}
-            \tableofcontents[sections={1-3}]
-        \end{column}
-        \begin{column}{0.5\textwidth}
-            \tableofcontents[sections={4-7}]
-        \end{column}
-    \end{columns}
+\begin{frame}{Outline}
+    \tableofcontents
 \end{frame}
 
 \section{Introduction and Global Context}
@@ -85,6 +78,17 @@
     \end{itemize}
 \end{frame}
 
+\begin{frame}{SmartNIC Landscape}
+    \begin{center}
+        \includegraphics[width=0.95\textwidth]{../../assets/smartNIC_landscape.png}
+    \end{center}
+    \vspace{2mm}
+    \begin{itemize}
+        \item Spectrum from fixed-function NICs to highly-programmable DPUs (compare programmability vs. capability).
+        \item Use this slide when you explain trade-offs: throughput, latency and power.
+    \end{itemize}
+\end{frame}
+
 \section{Programming Paradigms}
 \begin{frame}{Programmability: P4 and the Match-Action Pipeline}
     \begin{itemize}
@@ -94,7 +98,7 @@
                 \item Programmable Match-Action tables inside the NIC silicon.
                 \item Allows for "Protocol Independence."
             \end{itemize}
-        \item \textbf{Implementation}: Our repository (\texttt{examples/02-p4}) shows a basic L2 forwarding logic defined in P4_16.
+        \item \textbf{Implementation}: See \texttt{examples/02-p4-programmability/basic\_l2.p4} -- a minimal L2 forwarding example (match-action table).
     \end{itemize}
 \end{frame}
 
@@ -108,10 +112,50 @@
         \item \textbf{XDP (eXpress Data Path)}:
             \begin{itemize}
                 \item An eBPF hook placed as early as possible (the NIC driver).
-                \item Can DROP, FORWARD, or REDIRECT packets \textit{before} the kernel allocates a socket buffer (\texttt{sk_buff}).
+                \item Can DROP, FORWARD, or REDIRECT packets \textit{before} the kernel allocates a socket buffer (\texttt{sk\_buff}).
             \end{itemize}
-        \item \textbf{Demo}: See our \texttt{examples/03-ebpf-xdp} filter for ICMP-drop results.
+        \item \textbf{Demo}: See \texttt{examples/03-ebpf-xdp/03-ebpf\_xdp.c} (ICMP-drop example).
     \end{itemize}
+\end{frame}
+
+\begin{frame}{eBPF / XDP: Runtime Architecture}
+    \centering
+    \includegraphics[width=0.85\textwidth]{../../assets/smartnic_workflow.png}
+    \vspace{2mm}
+    \begin{itemize}
+        \item Kernel-level verification and JIT -- safe, high-speed packet processing.
+        \item XDP attaches at the driver level (earliest path) -- ideal for filtering and DDoS mitigation.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Code: P4 -- basic L2}
+\begin{lstlisting}[basicstyle=\ttfamily\small]
+// action forward sets egress port based on dst MAC
+action forward(bit<9> port) { meta.egress_spec = port; }
+
+// table: exact-match on dst MAC -> forward / drop
+table mac_forwarding {
+    key = { hdr.ethernet.dstAddr: exact; }
+    actions = { forward; drop; }
+}
+\end{lstlisting}
+\begin{itemize}
+    \item Simple match-action pipeline: lookups happen in hardware tables.
+    \item Point to \texttt{basic\_l2.p4} when explaining table installs and entries.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Code: eBPF/XDP -- ICMP drop}
+\begin{lstlisting}[language=C,basicstyle=\ttfamily\small]
+if (ip->protocol == IPPROTO_ICMP) {
+    // drop ICMP packets
+    return XDP_DROP;
+}
+\end{lstlisting}
+\begin{itemize}
+    \item Early drop in kernel driver path -- zero-copy and minimal CPU.
+    \item Attach with \texttt{ip link set dev <iface> xdp obj ...} (see file header).
+\end{itemize}
 \end{frame}
 
 \section{Real-World Applications}
@@ -134,12 +178,23 @@
     \end{itemize}
 \end{frame}
 
+\begin{frame}{Application 3: Line-rate Security \& DDoS Mitigation}
+    \begin{itemize}
+        \item \textbf{Problem}: Volumetric attacks and high-rate malicious flows can saturate host CPUs and network queues.
+        \item \textbf{DPU approach}: perform early-drop and per-flow state in the NIC (P4 / hardware match-action) or attach XDP/eBPF at the driver for rapid filtering.
+        \item \textbf{Benefits}: drop malicious traffic at line-rate, reduce host CPU consumption, and enable real-time telemetry for upstream mitigation.
+        \item \textbf{Demo hint}: start with `examples/03-ebpf-xdp` for early-drop logic; scale to DPU offloads for production.
+    \end{itemize}
+\end{frame}
+
 \section{Performance Simulation}
 \begin{frame}{Simulation: Offload Performance}
     We simulated the host CPU throughput gains when offloading work to a DPU.
     \vfill
     \centering
     \includegraphics[width=0.75\textwidth]{../../assets/offload_plot.png}
+    \vspace{2mm}
+    \small Model note: offloading fraction $\alpha$ of packet processing increases host capacity approximately proportionally.
     \vfill
     \par\footnotesize Simulation results show $>50\%$ throughput increase in targeted workloads when logic is moved to the hardware pipeline.
 \end{frame}
@@ -153,7 +208,7 @@
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Closing Summary}
+\begin{frame}{Key Takeaways}
     \begin{itemize}
         \item \textbf{Offload is Mandatory}: At 100G+ speeds, host processing is no longer viable.
         \item \textbf{Isolation is Security}: DPUs create a "Hard Gap" between the user VM and the infrastructure provider.
@@ -172,6 +227,23 @@
     \centering
     \Large \textbf{Thank You!} \\
     \small Questions?
+\end{frame}
+
+\section{References}
+\begin{frame}{References}
+    \begin{itemize}
+        \item Packet Pushers -- DPU-based smart interfaces: \\
+        \texttt{https://packetpushers.net/blog/dpu-based-smart-interfaces-and-the-future-of-network-functions-and-security-at-the-edge/}
+        \item Ubuntu -- Data centre networking \& SmartNICs: \\
+        \texttt{https://ubuntu.com/blog/data-centre-networking-smartnics}
+        \item Hot Chips -- NVIDIA DPU (Idan Burstein): \\
+        \texttt{https://www.hc33.hotchips.org/assets/program/conference/day1/HC2021.NVIDIA.IdanBurstein.v08.norecording.pdf}
+        \item Bosshart et al., "P4: programming protocol-independent packet processors," ACM SIGCOMM CCR, 2014.
+        \item Hoiland-Jorgensen et al., "The eXpress Data Path (XDP)," CoNEXT 2018.
+        \item G. Liu et al., "A Survey of SmartNICs and DPUs," IEEE Communications Surveys \& Tutorials, 2024.
+        \item P4 Language Consortium -- \texttt{https://p4.org}
+        \item eBPF resources -- \texttt{https://ebpf.io}
+    \end{itemize}
 \end{frame}
 
 \end{document}
